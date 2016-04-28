@@ -1,0 +1,6 @@
+*.pyc
+.coverage
+dist
+MANIFEST.in
+build/
+weather.egg-info/

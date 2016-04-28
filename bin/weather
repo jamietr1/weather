@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+
+import weather
+import sys, getopt
+import mytime
+
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv, "l:d:")
+    except getopt.GetoptError:
+        print "location [-l location] [-d date]"
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt == '-l':
+            resolve_address = 1
+        if opt == '-d':
+            suppress_output = 1
+
+    dt = mytime.now()
+    print weather.digest(weather.local_conditions(dt))
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
