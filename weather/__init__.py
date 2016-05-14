@@ -62,19 +62,66 @@ def get_windbearing(bearing):
         return "northwest"
 
 def digest(conditions):
-    digest = conditions.summary
+    if (str(type(conditions)) == "<class 'forecastio.models.ForecastioDataPoint'>"):
+        digest = conditions.summary
 
-    clouds = get_clouds(conditions.cloudCover)
-    if clouds != "":
-        digest += ', ' + clouds
+        clouds = get_clouds(conditions.cloudCover)
+        if clouds != "":
+            digest += ', ' + clouds
 
-    digest += ', ' + get_windspeed(conditions.windSpeed)
-    if (conditions.windSpeed >=9):
-        digest += ' from the ' + get_windbearing(conditions.windBearing)
+        digest += ', ' + get_windspeed(conditions.windSpeed)
+        if (conditions.windSpeed >=9):
+            digest += ' from the ' + get_windbearing(conditions.windBearing)
 
-    digest += ', ' + str(int(conditions.temperature)) + ' F'
-    print digest
+        digest += ', ' + str(int(conditions.temperature)) + ' F'
+        return digest
+    elif (str(type(conditions)) == "<class 'forecastio.models.ForecastioDataBlock'>"):
+        # Data block
+        digest = conditions.summary
+        for db in conditions.data:
+            # we want to show the weather at 8 am, noon, 4 pm, and 8 pm
+            if mytime.dt_format(mytime.datetime_from_string(str(db.time),1), 'time') == "08:00 AM":
+                digest += '\n' + '  *  8 AM: ' + db.summary + ', ' + str(int(db.temperature)) + ' F'
+            elif mytime.dt_format(mytime.datetime_from_string(str(db.time),1), 'time') == "10:00 AM":
+                digest += '\n' + '  * 10 AM: ' + db.summary + ', ' + str(int(db.temperature)) + ' F'
+            elif mytime.dt_format(mytime.datetime_from_string(str(db.time),1), 'time') == "12:00 PM":
+                digest += '\n' + '  * 12 PM: ' + db.summary + ', ' + str(int(db.temperature)) + ' F'
+            elif mytime.dt_format(mytime.datetime_from_string(str(db.time),1), 'time') == "04:00 PM":
+                digest += '\n' + '  *  4 PM: ' + db.summary + ', ' + str(int(db.temperature)) + ' F'
+            elif mytime.dt_format(mytime.datetime_from_string(str(db.time),1), 'time') == "08:00 PM":
+                digest += '\n' + '  *  8 PM: ' + db.summary + ', ' + str(int(db.temperature)) + ' F'
 
+            #print db.time
+            #print db.summary
+            #print db.icon
+            #print get_weather_attribute(db, 'sunriseTime')
+            #print get_weather_attribute(db, 'sunsetTime')
+            #print get_weather_attribute(db, 'moonPhase')
+            #print get_weather_attribute(db, 'precipType')
+            #print get_weather_attribute(db, 'precipAccumulation')
+            #print get_weather_attribute(db, 'temperatureMin')
+            #print get_weather_attribute(db, 'temperatureMax')
+        return digest
+
+def get_weather_attribute(data_block, attribute):
+    try:
+        if attribute == 'sunriseTime':
+            value = data_block.sunriseTime
+        elif attribute == 'sunsetTime':
+            value = data_block.sunsetTime
+        elif attribute == 'moonPhase':
+            value = data_block.moonPhase
+        elif attribute == 'precipType':
+            value = data_block.precipType
+        elif attribute == 'precipAccumulation':
+            value = data_block.precipAccumulation
+        elif attribute == 'temperatureMin':
+            value = data_block.temperatureMin
+        elif attribute == 'temperatureMax':
+            value = data_block.temperatureMax
+    except AttributeError:
+        value = None
+    return value
 
 def conditions(lat, lon, dt):
     api_key = myconfig.get_setting('weather_api')
@@ -84,17 +131,40 @@ def conditions(lat, lon, dt):
     seconds = mytime.epoch_from_datetime(now_local) - mytime.epoch_from_datetime(dt)
     if (seconds >= 0 and seconds < 3600):
         # Within the hour - check the cache first
-        forecast = forecastio.load_forecast(api_key, lat, lon)
-        update_weather_obs(dt, lat, lon, forecast.currently())
-        return forecast.currently()
+        try:
+            forecast = forecastio.load_forecast(api_key, lat, lon)
+            update_weather_obs(dt, lat, lon, forecast.currently())
+        except:
+            return "NULL"
+        else:
+            return forecast.currently()
     elif (seconds > 3600):
         # In the past - check the repo first
-        forecast = forecastio.load_forecast(api_key, lat, lon, time=dt)
+        try:
+            forecast = forecastio.load_forecast(api_key, lat, lon, time=dt)
+        except:
+            return "NULL"
         #update_weather_obs(dt, lat, lon, forecast.currently())
-        return forecast.currently()
+        else:
+            return forecast.currently()
     elif (seconds < 0):
         # In the future - get a forecast, but don't update obs
-        return "Future"
+        try:
+            forecast = forecastio.load_forecast(api_key, lat, lon, time=dt)
+        except:
+            forecast = "NULL"
+        if (abs(seconds) < 60*60*24*2):
+            # Within the next 2 days
+            if forecast == "NULL":
+                return forecast
+            else:
+                return forecast.hourly()
+        else:
+            # Can only go a week out
+            if forecast == "NULL":
+                return forecast.daily()
+            else:
+                return "NULL"
 
 def local_conditions(dt):
     lat, lon = whereami.coords()
@@ -121,8 +191,8 @@ def update_weather_obs(dt, lat, lon, forecast):
         file_obj = open(LOCATION_REPO ,"w")
 
     observation = str(dt.isoformat()) + ','
-    observation += lat + ','
-    observation += lon + ','
+    observation += str(lat) + ','
+    observation += str(lon) + ','
     observation += weather_summary + ','
     observation += weather_icon + ','
     observation += str(weather_temp) + ','

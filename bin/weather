@@ -1,24 +1,87 @@
 #!/usr/bin/env python
 
 import weather
+from geopy.geocoders import Nominatim
 import sys, getopt
 import mytime
 
+# User should be able to type:
+#   weather [weather for current date/location]
+#   weather on [date]
+#   weather in [location]
+#   weather [tomorrow]
+#   weather on [date] in [location]
+#   weather in [location] on [date]
+
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv, "l:d:")
+        opts, args = getopt.getopt(argv, "hV")
     except getopt.GetoptError:
-        print "location [-l location] [-d date]"
+        print "weather [-l location] [-d date]"
         sys.exit(2)
 
-    for opt, arg in opts:
-        if opt == '-l':
-            resolve_address = 1
-        if opt == '-d':
-            suppress_output = 1
+    # parse out the command line options
+    report = ""
+    verbose = 1
 
-    dt = mytime.now()
-    print weather.digest(weather.local_conditions(dt))
+    if len(args) == 0:
+        #print "Current date/location"
+        weather_time = mytime.now()
+        report =  weather.digest(weather.local_conditions(weather_time))
+    elif len(args) == 1 and args[0] == "tomorrow":
+        weather_time = mytime.tomorrow()
+        report = weather.digest(weather.local_conditions(weather_time))
+    elif len(args) == 2 and args[0] == "on":
+        weather_time = mytime.datetime_from_string(args[1], 1)
+        report = weather.digest(weather.local_conditions(weather_time))
+    elif len(args) == 2 and args[0] == "in":
+        geolocator = Nominatim()
+        location = geolocator.geocode(args[1])
+        weather_time = mytime.now()
+        report = weather.digest(weather.conditions(location.latitude, location.longitude, weather_time))
+        weather_location = location.address
+    elif len(args) == 3 and args[0] == "tomorrow":
+        weather_time = mytime.tomorrow()
+        geolocator = Nominatim()
+        location = geolocator.geocode(args[2])
+        report = weather.digest(weather.conditions(location.latitude, location.longitude, weather_time))
+        weather_location = location.address
+        print "Specific date (tomorrow)/specific location"
+    elif len(args) == 4:
+        if (args[0] == "on"):
+            weather_time = mytime.datetime_from_string(args[1], 1)
+            geolocator = Nominatim()
+            location = geolocator.geocode(args[3])
+            report = weather.digest(weather.conditions(location.latitude, location.longitude, weather_time))
+            weather_location = location.address
+        elif (args[0] == "in"):
+            # Start with location
+            weather_time = mytime.datetime_from_string(args[3], 3)
+            geolocator = Nominatim()
+            location = geolocator.geocode(args[1])
+            report = weather.digest(weather.conditions(location.latitude, location.longitude, weather_time))
+            weather_location = location.address
+        else:
+            print "Error!"
+    else:
+        print "Error!"
+
+
+    for opt, arg in opts:
+        if opt == '-V':
+            verbose = 0
+
+    if verbose == 1:
+        try:
+            location_header = "Weather for " + weather_location
+        except:
+            location_header = "Weather for current location"
+        print location_header
+        print mytime.dt_format(weather_time, 'header')
+        print "=" * len(location_header)
+
+    print report
+    #print weather.digest(weather.local_conditions(mytime.tomorrow()))
 
 if __name__ == "__main__":
     main(sys.argv[1:])
